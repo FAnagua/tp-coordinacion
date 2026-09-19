@@ -24,34 +24,36 @@ class SumFilter:
                 MOM_HOST, AGGREGATION_PREFIX, [f"{AGGREGATION_PREFIX}_{i}"]
             )
             self.data_output_exchanges.append(data_output_exchange)
-        self.amount_by_fruit = {}
+        self.amount_by_query: dict[str, dict[str, fruit_item.FruitItem]] = {}
 
-    def _process_data(self, fruit, amount):
+    def _process_data(self, query_id, fruit, amount):
         logging.info(f"Process data")
-        self.amount_by_fruit[fruit] = self.amount_by_fruit.get(
+        amount_by_fruit = self.amount_by_query.setdefault(query_id, {})
+        amount_by_fruit[fruit] = amount_by_fruit.get(
             fruit, fruit_item.FruitItem(fruit, 0)
         ) + fruit_item.FruitItem(fruit, int(amount))
 
-    def _process_eof(self):
+    def _process_eof(self, query_id):
         logging.info(f"Broadcasting data messages")
-        for final_fruit_item in self.amount_by_fruit.values():
+        fruits_by_query = self.amount_by_query.pop(query_id, {})
+        for final_fruit_item in fruits_by_query.values():
             for data_output_exchange in self.data_output_exchanges:
                 data_output_exchange.send(
-                    message_protocol.internal.serialize(
-                        [final_fruit_item.fruit, final_fruit_item.amount]
+                    message_protocol.internal.serialize_record(
+                        [query_id, final_fruit_item.fruit, final_fruit_item.amount]
                     )
                 )
 
         logging.info(f"Broadcasting EOF message")
         for data_output_exchange in self.data_output_exchanges:
-            data_output_exchange.send(message_protocol.internal.serialize([]))
+            data_output_exchange.send(message_protocol.internal.serialize_eof([query_id]))
 
 
     def process_data_messsage(self, message, ack, nack):
-        fields = message_protocol.internal.deserialize(message)
-        if len(fields) == 2:
+        command, fields = message_protocol.internal.deserialize(message)
+        if command == message_protocol.internal.Command.RECORD:
             self._process_data(*fields)
-        else:
+        elif command == message_protocol.internal.Command.EOF:
             self._process_eof(*fields)
         ack()
 

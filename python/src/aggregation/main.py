@@ -23,21 +23,30 @@ class AggregationFilter:
         self.output_queue = middleware.MessageMiddlewareQueueRabbitMQ(
             MOM_HOST, OUTPUT_QUEUE
         )
-        self.fruit_top = []
+        self.fruit_by_query: dict[str, dict[str, fruit_item.FruitItem]] = {}
+        self.fruit_top_by_query: dict[str, list[fruit_item.FruitItem]] = {}
 
-    def _process_data(self, fruit, amount):
+    def _process_data(self, query_id, fruit, amount):
         logging.info("Processing data message")
-        for i in range(len(self.fruit_top)):
-            if self.fruit_top[i].fruit == fruit:
-                self.fruit_top[i] = self.fruit_top[i] + fruit_item.FruitItem(
-                    fruit, amount
-                )
-                return
-        bisect.insort(self.fruit_top, fruit_item.FruitItem(fruit, amount))
+        ammount_by_fruit = self.fruit_by_query.setdefault(query_id, {})
+        fruit_top = self.fruit_top_by_query.setdefault(query_id, [])
 
-    def _process_eof(self):
+        if fruit in ammount_by_fruit:
+            old_fruit = ammount_by_fruit[fruit]
+            fruit_top.remove(old_fruit)
+
+            new_fruit = old_fruit + fruit_item.FruitItem(fruit, int(amount))
+            ammount_by_fruit[fruit] = new_fruit
+
+            bisect.insort(fruit_top, new_fruit)
+        else:
+            new_fruit = fruit_item.FruitItem(fruit, int(amount))
+            ammount_by_fruit[fruit] = new_fruit
+            bisect.insort(fruit_top, new_fruit)
+
+    def _process_eof(self, query_id):
         logging.info("Received EOF")
-        fruit_chunk = list(self.fruit_top[-TOP_SIZE:])
+        fruit_chunk = self.fruit_top_by_query.pop(query_id, [])[-TOP_SIZE:]
         fruit_chunk.reverse()
         fruit_top = list(
             map(
@@ -45,16 +54,16 @@ class AggregationFilter:
                 fruit_chunk,
             )
         )
-        self.output_queue.send(message_protocol.internal.serialize(fruit_top))
-        del self.fruit_top
+        self.output_queue.send(message_protocol.internal.serialize_record([query_id, fruit_top]))
+        #del self.fruit_top_by_query[query_id]
 
     def process_messsage(self, message, ack, nack):
         logging.info("Process message")
-        fields = message_protocol.internal.deserialize(message)
-        if len(fields) == 2:
+        command ,fields = message_protocol.internal.deserialize(message)
+        if command == message_protocol.internal.Command.RECORD:
             self._process_data(*fields)
-        else:
-            self._process_eof()
+        elif command == message_protocol.internal.Command.EOF:
+            self._process_eof(*fields)
         ack()
 
     def start(self):
