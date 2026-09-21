@@ -25,6 +25,7 @@ class AggregationFilter:
         )
         self.fruit_by_query: dict[str, dict[str, fruit_item.FruitItem]] = {}
         self.fruit_top_by_query: dict[str, list[fruit_item.FruitItem]] = {}
+        self.count_eof_by_query: dict[str, int] = {}
 
     def _process_data(self, query_id, fruit, amount):
         logging.info("Processing data message")
@@ -45,16 +46,19 @@ class AggregationFilter:
             bisect.insort(fruit_top, new_fruit)
 
     def _process_eof(self, query_id):
-        logging.info("Received EOF")
-        fruit_chunk = self.fruit_top_by_query.pop(query_id, [])[-TOP_SIZE:]
-        fruit_chunk.reverse()
-        fruit_top = list(
-            map(
-                lambda fruit_item: (fruit_item.fruit, fruit_item.amount),
-                fruit_chunk,
+        logging.info(f"Received EOF query_id: {query_id}")
+        self.count_eof_by_query[query_id] = self.count_eof_by_query.get(query_id, 0) + 1
+
+        if self.count_eof_by_query[query_id] == SUM_AMOUNT:
+            fruit_chunk = self.fruit_top_by_query.pop(query_id, [])[-TOP_SIZE:]
+            fruit_chunk.reverse()
+            fruit_top = list(
+                map(
+                    lambda fruit_item: (fruit_item.fruit, fruit_item.amount),
+                    fruit_chunk,
+                )
             )
-        )
-        self.output_queue.send(message_protocol.internal.serialize_record([query_id, fruit_top]))
+            self.output_queue.send(message_protocol.internal.serialize_record([query_id, fruit_top]))
         #del self.fruit_top_by_query[query_id]
 
     def process_messsage(self, message, ack, nack):
