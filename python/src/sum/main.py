@@ -55,7 +55,8 @@ class SumFilter:
             ) + fruit_item.FruitItem(fruit, int(amount))
 
     def _process_eof(self, query_id, total_count_messages):
-        self.total_count_messages_by_query[query_id] = total_count_messages
+        with self.lock_query:
+            self.total_count_messages_by_query[query_id] = total_count_messages
         # ACA CREO Q SE NECESITA UN LOCK (TIPO LOCK_2) PARA EL TEMA DEL LA PUBBLICACION DE MENSAJES EN LA COLA
         with self.lock_output_queues_coordination:
             if len(self.output_queues_coordination) == 0:
@@ -75,22 +76,6 @@ class SumFilter:
         elif command == message_protocol.internal.Command.EOF:
             self._process_eof(*fields)
         ack()
-
-
-    def _send_fruits(self, query_id, fruits: dict[str, fruit_item.FruitItem]):
-        logging.info(f"Broadcasting data messages")
-        
-        for final_fruit_item in fruits.values():
-            for data_output_exchange in self.data_output_exchanges:
-                data_output_exchange.send(
-                    message_protocol.internal.serialize_record(
-                        [query_id, final_fruit_item.fruit, final_fruit_item.amount]
-                    )
-                )
-
-        logging.info(f"Broadcasting EOF message")
-        for data_output_exchange in self.data_output_exchanges:
-            data_output_exchange.send(message_protocol.internal.serialize_eof([query_id]))
 
     def _process_check_eof_readiness(self, query_id, coordinator_id):
         # ACA NECESITO DEL LOCK_1 PARA EL TEMA DE LA LECTURA/ESCRITURA DE COUNT_MESSAGES_BY_QUERY
@@ -129,13 +114,28 @@ class SumFilter:
             with self.lock_output_queues_coordination:
                 for _, output_queue_coordination in self.output_queues_coordination.items():
                     output_queue_coordination.send(message_protocol.internal.serialize_check_eof_confirm([query_id]))
-                self._process_check_eof_confirm(query_id)
+            self._process_check_eof_confirm(query_id)
 
         if check_eof_retry:
             # PREGUNTAR SI CONVIENE AGREGAR UN SLEEP PARA DAR TIEMPO PARA QUE SE PROCESEN LOS MENSAJES Y EVITAR SE HAGAN PREGUNTAS REDUNTANTES
             with self.lock_output_queues_coordination:
                 for _, output_queue_coordination in self.output_queues_coordination.items():
                     output_queue_coordination.send(message_protocol.internal.serialize_check_eof_readiness([query_id, ID]))
+
+    def _send_fruits(self, query_id, fruits: dict[str, fruit_item.FruitItem]):
+        logging.info(f"Broadcasting data messages")
+        
+        for final_fruit_item in fruits.values():
+            for data_output_exchange in self.data_output_exchanges:
+                data_output_exchange.send(
+                    message_protocol.internal.serialize_record(
+                        [query_id, final_fruit_item.fruit, final_fruit_item.amount]
+                    )
+                )
+
+        logging.info(f"Broadcasting EOF message")
+        for data_output_exchange in self.data_output_exchanges:
+            data_output_exchange.send(message_protocol.internal.serialize_eof([query_id]))
 
     def _process_check_eof_confirm(self, query_id):
         with self.lock_query:
