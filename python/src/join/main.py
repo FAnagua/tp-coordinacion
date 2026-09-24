@@ -1,5 +1,6 @@
 import os
 import logging
+import bisect
 
 from common import middleware, message_protocol, fruit_item
 
@@ -23,10 +24,38 @@ class JoinFilter:
             MOM_HOST, OUTPUT_QUEUE
         )
 
+        self.fruit_top_by_query: dict[str, list[fruit_item.FruitItem]] = {}
+        self.count_parcial_top_by_query: dict[str, int] = {}
+
+    def _process_parcial_top(self, query_id, parcial_fruit_top):
+        logging.info(f"Received parcial top query_id: {query_id}")
+        fruit_top = self.fruit_top_by_query.setdefault(query_id, [])
+
+        for fruit, ammout in parcial_fruit_top:
+            logging.info(f"Received parcial top fruit: {fruit} amount: {ammout}")
+            bisect.insort(fruit_top, fruit_item.FruitItem(fruit, ammout))
+
+        self.count_parcial_top_by_query[query_id] = self.count_parcial_top_by_query.get(query_id, 0) + 1
+
+        if self.count_parcial_top_by_query[query_id] == AGGREGATION_AMOUNT:
+            final_fruit_top = self.fruit_top_by_query.pop(query_id, [])[-TOP_SIZE:]
+            final_fruit_top.reverse()
+            send_fruit_top = list(
+                map(
+                    lambda fruit_item: (fruit_item.fruit, fruit_item.amount),
+                    final_fruit_top
+                )
+            )
+
+            self.output_queue.send(message_protocol.internal.serialize_top([query_id, send_fruit_top]))
+
     def process_messsage(self, message, ack, nack):
         logging.info("Received top")
-        _, [query_id, fruit_top] = message_protocol.internal.deserialize(message)
-        self.output_queue.send(message_protocol.internal.serialize([query_id, fruit_top]))
+        command , fields = message_protocol.internal.deserialize(message)
+
+        if command == message_protocol.internal.Command.PARCIAL_TOP:
+            self._process_parcial_top(*fields)
+        
         ack()
 
     def start(self):

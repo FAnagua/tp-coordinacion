@@ -58,7 +58,7 @@ class AggregationFilter:
                     fruit_chunk,
                 )
             )
-            self.output_queue.send(message_protocol.internal.serialize_record([query_id, fruit_top]))
+            self.output_queue.send(message_protocol.internal.serialize_parcial_top([query_id, fruit_top]))
         #del self.fruit_top_by_query[query_id]
 
     def process_messsage(self, message, ack, nack):

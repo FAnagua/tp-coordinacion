@@ -18,11 +18,10 @@ class MessageHandler:
         return message_protocol.internal.serialize_eof([self.query_id, self.total_count_messages])
 
     def deserialize_result_message(self, message):
-        query_id, top_fruit = message_protocol.internal.deserialize(message)
+        command, [query_id, top_fruit] = message_protocol.internal.deserialize(message)
         
-        # logging.error(f"Deserializing result message: {query_id}, {top_fruit}")
-        # logging.error(f"Current query id: {self.query_id}")
-        if query_id != self.query_id:
-            return None
+        
+        if command == message_protocol.internal.Command.TOP and query_id == self.query_id:
+            return top_fruit
 
-        return top_fruit
+        return None

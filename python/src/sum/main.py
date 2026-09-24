@@ -1,6 +1,7 @@
 import os
 import logging
 import threading
+import hashlib
 
 from common import middleware, message_protocol, fruit_item
 
@@ -123,15 +124,18 @@ class SumFilter:
                     output_queue_coordination.send(message_protocol.internal.serialize_check_eof_readiness([query_id, ID]))
 
     def _send_fruits(self, query_id, fruits: dict[str, fruit_item.FruitItem]):
-        logging.info(f"Broadcasting data messages")
+        logging.info(f"Sending fruits for query_id: {query_id}")
         
         for final_fruit_item in fruits.values():
-            for data_output_exchange in self.data_output_exchanges:
-                data_output_exchange.send(
-                    message_protocol.internal.serialize_record(
-                        [query_id, final_fruit_item.fruit, final_fruit_item.amount]
-                    )
+
+            key = hashlib.md5(f"{query_id}_{final_fruit_item.fruit}".encode()).digest()
+            index = int.from_bytes(key, "big") % AGGREGATION_AMOUNT
+
+            self.data_output_exchanges[index].send(
+                message_protocol.internal.serialize_record(
+                    [query_id, final_fruit_item.fruit, final_fruit_item.amount]
                 )
+            )
 
         logging.info(f"Broadcasting EOF message")
         for data_output_exchange in self.data_output_exchanges:

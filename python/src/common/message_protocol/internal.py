@@ -7,6 +7,8 @@ class Command(IntEnum):
     CHECK_EOF_READINESS = 0X03
     CHECK_EOF_RESPONSE = 0X04
     CHECK_EOF_CONFIRM = 0X05
+    PARCIAL_TOP = 0X06
+    TOP = 0X07
 
 def serialize_record(message):
     return json.dumps([Command.RECORD, message]).encode("utf-8")
@@ -22,6 +24,12 @@ def serialize_check_eof_response(message):
 
 def serialize_check_eof_confirm(message):
     return json.dumps([Command.CHECK_EOF_CONFIRM, message]).encode("utf-8")
+
+def serialize_parcial_top(message):
+    return json.dumps([Command.PARCIAL_TOP, message]).encode("utf-8")
+
+def serialize_top(message):
+    return json.dumps([Command.TOP, message]).encode("utf-8")
 
 def serialize(message):
     return json.dumps(message).encode("utf-8")
