@@ -34,10 +34,18 @@ class ConnectionManager:
         except pika.exceptions.AMQPConnectionError:
             raise MessageMiddlewareDisconnectedError("Connection to RabbitMQ lost.")
 
+    def stop_consuming_threadsafe(self):
+        try:
+            self.connection.add_callback_threadsafe(self.channel.stop_consuming)
+        except pika.exceptions.AMQPConnectionError:
+            raise MessageMiddlewareDisconnectedError("Connection to RabbitMQ lost.")
+
     def close(self):
         try:
-            self.channel.close()
-            self.connection.close()
+            if self.channel.is_open:
+                self.channel.close()
+            if self.connection.is_open:
+                self.connection.close()
         except Exception as e:
             raise MessageMiddlewareCloseError(str(e))
 
@@ -61,6 +69,9 @@ class MessageMiddlewareQueueRabbitMQ(MessageMiddlewareQueue):
 
     def stop_consuming(self):
         self.connection_manager.stop_consuming()
+
+    def stop_consuming_threadsafe(self):
+        self.connection_manager.stop_consuming_threadsafe()
 
     def send(self, message):
         try:
@@ -105,6 +116,9 @@ class MessageMiddlewareExchangeRabbitMQ(MessageMiddlewareExchange):
 
     def stop_consuming(self):
         self.connection_manager.stop_consuming()
+
+    def stop_consuming_threadsafe(self):
+        self.connection_manager.stop_consuming_threadsafe()
 
     def send(self, message):
         try:

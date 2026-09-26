@@ -1,6 +1,7 @@
 import os
 import logging
 import bisect
+import signal
 
 from common import middleware, message_protocol, fruit_item
 
@@ -61,11 +62,29 @@ class JoinFilter:
     def start(self):
         self.input_queue.start_consuming(self.process_messsage)
 
+    def handle_sigterm(self, signum, frame):
+        logging.info("Received SIGTERM, stopping...")
+        self.input_queue.stop_consuming()
+
+    def close(self):
+        try:
+            self.input_queue.close()
+        except Exception as e:
+            logging.warning(f"Error closing input queue: {e}")
+        try:
+            self.output_queue.close()
+        except Exception as e:
+            logging.warning(f"Error closing output queue: {e}")
+
 
 def main():
     logging.basicConfig(level=logging.INFO)
     join_filter = JoinFilter()
-    join_filter.start()
+    signal.signal(signal.SIGTERM, join_filter.handle_sigterm)
+    try:
+        join_filter.start()
+    finally:
+        join_filter.close()
 
     return 0
 

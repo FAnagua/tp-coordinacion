@@ -2,6 +2,7 @@ import os
 import logging
 import threading
 import hashlib
+import signal
 
 from common import middleware, message_protocol, fruit_item
 
@@ -168,10 +169,40 @@ class SumFilter:
         self.input_queue.start_consuming(self.process_data_messsage)
         thread_coordination.join()
 
+    def handle_sigterm(self, signum, frame):
+        logging.info("Received SIGTERM, stopping...")
+        self.input_queue.stop_consuming()
+        self.input_queue_coordination.stop_consuming_threadsafe()
+
+    def close(self):
+        try:
+            self.input_queue.close()
+        except Exception as e:
+            logging.warning(f"Error closing input queue: {e}")
+        try:
+            self.input_queue_coordination.close()
+        except Exception as e:
+            logging.warning(f"Error closing input queue coordination: {e}")
+        
+        for _, output_queue_coordination in self.output_queues_coordination.items():
+            try:
+                output_queue_coordination.close()
+            except Exception as e:
+                logging.warning(f"Error closing output queue coordination: {e}")
+        for data_output_exchange in self.data_output_exchanges:
+            try:
+                data_output_exchange.close()
+            except Exception as e:
+                logging.warning(f"Error closing data output exchange: {e}")
+
 def main():
     logging.basicConfig(level=logging.INFO)
     sum_filter = SumFilter()
-    sum_filter.start()
+    signal.signal(signal.SIGTERM, sum_filter.handle_sigterm)
+    try:
+        sum_filter.start()
+    finally:
+        sum_filter.close()
     return 0
 
 

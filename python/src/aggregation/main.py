@@ -1,6 +1,7 @@
 import os
 import logging
 import bisect
+import signal
 
 from common import middleware, message_protocol, fruit_item
 
@@ -73,11 +74,28 @@ class AggregationFilter:
     def start(self):
         self.input_exchange.start_consuming(self.process_messsage)
 
+    def handle_sigterm(self, signum, frame):
+        logging.info("Received SIGTERM, stopping...")
+        self.input_exchange.stop_consuming()
+
+    def close(self):
+        try:
+            self.input_exchange.close()
+        except Exception as e:
+            logging.warning(f"Error closing input exchange: {e}")
+        try:
+            self.output_queue.close()
+        except Exception as e:
+            logging.warning(f"Error closing output queue: {e}")
 
 def main():
     logging.basicConfig(level=logging.INFO)
     aggregation_filter = AggregationFilter()
-    aggregation_filter.start()
+    signal.signal(signal.SIGTERM, aggregation_filter.handle_sigterm)
+    try:
+        aggregation_filter.start()
+    finally:
+        aggregation_filter.close()
     return 0
 
 
