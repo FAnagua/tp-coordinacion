@@ -1,7 +1,7 @@
 import os
 import logging
 import threading
-import hashlib
+import zlib
 import signal
 
 from common import middleware, message_protocol, fruit_item
@@ -117,9 +117,9 @@ class SumFilter:
                 for _, output_queue_coordination in self.output_queues_coordination.items():
                     output_queue_coordination.send(message_protocol.internal.serialize_check_eof_confirm([query_id]))
             self._process_check_eof_confirm(query_id)
-
-        if check_eof_retry:
+        elif check_eof_retry:
             # PREGUNTAR SI CONVIENE AGREGAR UN SLEEP PARA DAR TIEMPO PARA QUE SE PROCESEN LOS MENSAJES Y EVITAR SE HAGAN PREGUNTAS REDUNTANTES
+            logging.info(f"Retrying check EOF readiness for query_id: {query_id}")
             with self.lock_output_queues_coordination:
                 for _, output_queue_coordination in self.output_queues_coordination.items():
                     output_queue_coordination.send(message_protocol.internal.serialize_check_eof_readiness([query_id, ID]))
@@ -129,8 +129,7 @@ class SumFilter:
         
         for final_fruit_item in fruits.values():
 
-            key = hashlib.md5(f"{query_id}_{final_fruit_item.fruit}".encode()).digest()
-            index = int.from_bytes(key, "big") % AGGREGATION_AMOUNT
+            index = zlib.crc32(f"{query_id}_{final_fruit_item.fruit}".encode()) % AGGREGATION_AMOUNT
 
             self.data_output_exchanges[index].send(
                 message_protocol.internal.serialize_record(
