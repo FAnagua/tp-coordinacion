@@ -59,7 +59,7 @@ class MessageMiddlewareQueueRabbitMQ(MessageMiddlewareQueue):
 
     def start_consuming(self, on_message_callback):
         try:
-            self.channel.basic_qos(prefetch_count=1)
+            # self.channel.basic_qos(prefetch_count=1)
             self.channel.basic_consume(queue=self.queue_name, on_message_callback=make_callback(on_message_callback))
             self.channel.start_consuming()
         except pika.exceptions.AMQPConnectionError:
