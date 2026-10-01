@@ -12,7 +12,7 @@ Para idententificar a cada cliente se le asigna un `query_id` que es único, dic
 
 Dentro de cada instancia de SUM se tienen 2 hilos:
 
-*   Un hilo se encarga de escuchar la cola por EL cual envía mensajes el gateway.
+*   Un hilo se encarga de escuchar la cola por el cual envía mensajes el gateway.
 *   El otro hilo se encarga de escuchar otra cola, que se encarga de la comunicación entre las instancias de SUM (Cada instancia de SUM tiene su propia cola).
 
 Cuando a un SUM le llega el EOF además recibe el **total de los mensajes que se enviaron del cliente**. Una vez recibido el EOF, de una `query_id`, dicho SUM actua como **coordinador** y les pregunta a las otras instancias de SUM con un mensaje tipo `CHECK_EOF_READINESS` a sus respectivas colas. Cuando los SUMS reciben el `CHECK_EOF_READINESS` le envian un mensaje al **coordinador** de tipo `CHECK_EOF_RESPONSE` con los mensajes que procesaron actualmente de dicha `query_id`. Una vez que el **coordinador** recibe todos los `CHECK_EOF_RESPONSE` de las instancias de SUM a las que pregunto, suma los mensajes que proceso cada instancia de SUM de dicha `query_id`, incluyendo el **coordinador** y compara con el total que llego con el EOF: 
